@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Untitled Document</title>
+    <meta charset="UTF-8">
+    <meta name="description" content="">
+    <meta name="keywords" content="">
+</head>
+
+<body>
+    <canvas id="canvas" width="1000" height="800"></canvas>
+</body>
+<script type="text/javascript">
+    //向量
+    var vector2D = function (x, y) {
+        this.x = x;
+        this.y = y;
+        this.length = function () {
+            return Math.sqrt(this.x * this.x + this.y * this.y);
+        }
+        this.dot = function (v) {
+            return this.x * v.x + this.y * v.y
+        }
+        this.cross = function (v) {
+            return this.x * v.y - this.y * v.x;
+        }
+        this.scale = function (n) {
+            return new vector2D(this.x * n, this.y * n);
+        }
+        this.add = function (v) {
+            return new vector2D(this.x + v.x, this.y + v.y);
+        }
+        this.sub = function (v) {
+            return new vector2D(this.x - v.x, this.y - v.y);
+        }
+        this.swap = function () {
+            return new vector2D(-this.y, this.x);
+        }
+        this.projection = function (v) {
+            var temp = this.dot(v) / v.length();
+            return new vector2D(v.x * temp, v.y * temp);
+        }
+        this.normalize = function () {
+            var r = this.length();
+            return new vector2D(this.x / r, this.y / r);
+        }
+        this.reflection = function (f) {
+            var fn = f.normalize();
+            var v0_u = this.projection(fn);
+            var v0_v = this.sub(v0_u);
+            var v1 = v0_v.scale(-1).add(v0_u).normalize();
+            return v1;
+        }
+        this.refraction = function (n, f) {
+            var fn = f.normalize();
+            var fnv = fn.swap();
+            var n0 = n;
+            var temp = this.sub(this.projection(fn)).cross(fn);
+            if (temp > 0) {
+                fn = fn.scale(-1);
+                fnv = fn.swap();
+            }
+            var v0_u = this.projection(fn);
+            var v0_v = this.sub(v0_u);
+            /*var v0_temp = new vector2D(
+                v0_u.length() * (v0_u.cross(fnv) > 0 ? 1 : -1),
+                v0_v.length() * (v0_v.cross(fn) > 0 ? 1 : -1)
+            );
+            var s = n * v0_temp.x / v0_temp.length();*/
+            var v0_temp = new vector2D(v0_u.length(), v0_v.length());
+            var s = n0 * (v0_u.cross(fnv) > 0 ? 1 : -1) * v0_temp.x / v0_temp.length();
+            if (Math.abs(s) >= 1) {
+                return null;
+            }
+            var v1_temp = new vector2D(s, Math.sqrt(1 - s * s));
+            var v1 = new vector2D(
+                v1_temp.x * fn.x + v1_temp.y * fnv.x,
+                v1_temp.x * fn.y + v1_temp.y * fnv.y
+            );
+            return v1;
+        }
+        this.rotate = function (pAngle) {
+            var cos0 = Math.cos(pAngle);
+            var sin0 = Math.sin(pAngle);
+            return new vector2D(this.x * cos0 - this.y * sin0, this.y * cos0 + this.x * sin0);
+        }
+        this.interpolationV= function (pV, t) {
+            var v0 = pV.scale(t);
+            return new vector2D(this.x + v0.x, this.y + v0.y);
+        }
+        this.interpolation= function (pP, t) {
+            var v = pP.sub(this);
+            return this.interpolationV(v, t);
+        }
+    }
+
+    var canvas, ctx, canvasWidth, canvasHeight,mouseX=0,mouseY=0;
+
+
+    var segLength = 10,n = 40;
+
+    var bone = [];
+
+    function update(){
+        var tx = mouseX;
+        var ty = mouseY;
+        for(var i=0;i<bone.length;i++){
+            var dx = tx - bone[i].point.x;
+            var dy = ty - bone[i].point.y;
+            bone[i].angle = Math.atan2(dy, dx);        
+            tx -= Math.cos(bone[i].angle) * segLength;
+            ty -= Math.sin(bone[i].angle) * segLength;
+        }                   
+        bone[bone.length-1].point.x += (tx-bone[bone.length-1].point.x)*0.1;
+        bone[bone.length-1].point.y += (ty-bone[bone.length-1].point.y)*0.1;
+
+        for(var i=bone.length-1;i>=1;i--){
+            bone[i-1].point.x = bone[i].point.x + Math.cos(bone[i].angle) * segLength;
+            bone[i-1].point.y = bone[i].point.y + Math.sin(bone[i].angle) * segLength;
+        }
+    }
+
+    
+    function render() {
+        //ctx.globalCompositeOperation = 'source-over';
+        /*ctx.globalAlpha = 1;
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, w, h);*/
+        ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+        //ctx.globalCompositeOperation = 'screen';
+
+        for(var i=0;i<bone.length;i++){
+            var p0 = new vector2D(bone[i].point.x + Math.cos(bone[i].angle) * segLength,bone[i].point.y + Math.sin(bone[i].angle) * segLength);
+            drawLine(ctx,bone[i].point,p0,"#ff0000");
+        }
+    }
+    function loop() {
+        update();
+        render();
+        requestAnimationFrame(loop);
+    }
+    function drawPolygon(ctx,points, color, type) {
+        //console.log(ctx)
+        //ctx.save();
+        ctx.beginPath();
+        for(var temp in points){
+            var point01 = points[temp];
+            ctx[temp==0?"moveTo":"lineTo"](point01.x, point01.y);
+        }        
+        ctx[type + 'Style'] = color;
+        ctx.closePath();
+        ctx[type]();
+        //ctx.restore();
+    }
+    function drawCircle(ctx,point,radius, color, type) {
+        //ctx.save();
+        ctx.beginPath();
+        ctx.arc(point.x,point.y,radius,0,2*Math.PI);
+        ctx[type + 'Style'] = color;
+        ctx.closePath();
+        ctx[type]();
+        //ctx.restore();
+    }
+    function drawLine(ctx,point01,point02, color,lineWidth) {
+        var type = "stroke";
+        ctx.beginPath();
+        if(lineWidth!=undefined){
+            ctx.lineWidth=lineWidth;
+        }else{
+            ctx.lineWidth=1;
+        }
+        ctx.moveTo(point01.x, point01.y);
+        ctx.lineTo(point02.x, point02.y);
+        ctx[type + 'Style'] = color;
+        ctx.closePath();
+        ctx[type]();
+    }
+
+
+
+
+    (function() {
+        //
+        canvas = document.getElementById('canvas');
+        ctx = canvas.getContext('2d');
+        canvasWidth = canvas.width;
+        canvasHeight = canvas.height;
+
+        var tempX = canvasWidth / 2;
+        var tempY = canvasHeight / 2;
+        for(var i=0;i<n;i++){
+            bone.push({point:new vector2D(tempX,tempY),angle:0});
+        }
+
+        canvas.addEventListener('mousemove', mousemove);
+        mousemove();
+        function mousemove(e){
+            if(e){
+                mouseX = e.clientX;
+                mouseY = e.clientY;                
+            }
+        }
+        loop();
+    })()
+</script>
+<style>
+    body {
+        /*background-color: #000;*/
+        margin: 0;
+        overflow: hidden;
+    }
+    canvas {
+        background-color: #000;
+    }
+</style>
+
+</html>
